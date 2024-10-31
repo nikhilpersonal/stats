@@ -84,7 +84,7 @@ headshot_url = player_info.get('headshot_url', '')
 position = player_info.get('position', 'N/A')
 team = player_info.get('team', 'N/A')
 
-# Display player image, information, and metrics in a mobile-friendly layout
+# Display player image and information in a mobile-friendly layout
 st.markdown(f"<h2 style='text-align: center;'>{selected_player_name}</h2>", unsafe_allow_html=True)
 
 if headshot_url:
@@ -94,6 +94,7 @@ else:
 
 st.markdown(f"<p style='text-align: center;'><strong>Position</strong>: {position} | <strong>Team</strong>: {team}</p>", unsafe_allow_html=True)
 
+# Display metrics below the player bio
 # Check if data is available
 if player_data.empty:
     st.warning('No data available for this player in the selected season.')
@@ -110,8 +111,8 @@ else:
     if position == 'QB':
         metric_stats = {
             'Passing Yards': 'passing_yards',
-            'Passing Touchdowns': 'passing_tds',
-            'Rushing Touchdowns': 'rushing_tds'
+            'Passing TDs': 'passing_tds',
+            'Rushing TDs': 'rushing_tds'
         }
     elif position == 'RB':
         # Total touchdowns (rushing + receiving)
@@ -119,7 +120,7 @@ else:
         metric_stats = {
             'Rushing Yards': 'rushing_yards',
             'Receiving Yards': 'receiving_yards',
-            'Total Touchdowns': 'total_tds'
+            'Total TDs': 'total_tds'
         }
     elif position in ['WR', 'TE']:
         # Total touchdowns (rushing + receiving)
@@ -127,7 +128,7 @@ else:
         metric_stats = {
             'Receiving Yards': 'receiving_yards',
             'Receptions': 'receptions',
-            'Total Touchdowns': 'total_tds'
+            'Total TDs': 'total_tds'
         }
     else:
         metric_stats = {}
@@ -140,22 +141,24 @@ else:
         last_3_games = player_data.tail(3)
         season_avg = player_data.mean(numeric_only=True)
 
-        # Metrics display in a single row that wraps on mobile
+        # Display metrics below the player bio
         st.markdown("### Recent Performance")
-        metric_cols = st.columns(len(metric_stats))
-        for i, (metric_name, metric_column) in enumerate(metric_stats.items()):
+        for metric_name, metric_column in metric_stats.items():
             # Average over last 3 games
             last_3_avg = last_3_games[metric_column].mean()
             # Season average
             season_avg_metric = season_avg.get(metric_column, 0)
             # Delta
             delta = last_3_avg - season_avg_metric
-            with metric_cols[i]:
-                st.metric(
-                    label=metric_name,
-                    value=f"{last_3_avg:.1f}",
-                    delta=f"{delta:+.1f}"
-                )
+
+            # Display metric with styling
+            st.markdown(f"""
+                <div style='text-align: center; margin-bottom: 10px;'>
+                    <h4>{metric_name}</h4>
+                    <p style='font-size: 24px; margin: 0;'>{last_3_avg:.1f}</p>
+                    <p style='margin: 0; color: {"green" if delta >= 0 else "red"};'>{delta:+.1f} vs Season Avg</p>
+                </div>
+            """, unsafe_allow_html=True)
 
     # Box Score
     st.markdown("### Game-by-Game Stats")
@@ -178,35 +181,52 @@ else:
 
     st.dataframe(box_score_df)
 
-    # Plotly Chart Inputs
+    # Plotly Chart
     st.markdown("### Performance Over Time")
-    # Mapping of display names to internal column names
-    stats_columns = {
-        'Passing Yards': 'passing_yards',
-        'Passing Touchdowns': 'passing_tds',
-        'Interceptions': 'interceptions',
-        'Rushing Yards': 'rushing_yards',
-        'Rushing Touchdowns': 'rushing_tds',
-        'Receiving Yards': 'receiving_yards',
-        'Receiving Touchdowns': 'receiving_tds',
-        'Receptions': 'receptions',
-        'Targets': 'targets',
-        'Fumbles Lost': 'fumbles_lost',
-        'Fantasy Points PPR': 'fantasy_points_ppr'
-    }
-    # Filter out columns that may not be in the data
-    available_stats = {k: v for k, v in stats_columns.items() if v in player_data.columns}
 
-    # Statistic selection
-    selected_display_stat = st.selectbox('Select a Statistic to Plot:', list(available_stats.keys()))
-    fixed_line_value = st.text_input('Betting Line (Optional):', key='betting_line')
-
-    selected_category = available_stats[selected_display_stat]
+    selected_display_stat = st.selectbox('Select a Statistic to Plot:', list(metric_stats.keys()))
+    selected_category = metric_stats[selected_display_stat]
 
     # Create a copy of player_data to avoid SettingWithCopyWarning
     plot_data = player_data.copy()
 
     # Plotting with Plotly
+    fig = go.Figure()
+
+    # Add the player's performance line
+    fig.add_trace(go.Scatter(
+        x=plot_data['week'],
+        y=plot_data[selected_category],
+        mode='lines+markers',
+        marker=dict(color='blue', size=8),
+        line=dict(color='blue'),
+        name=selected_display_stat
+    ))
+
+    fig.update_layout(
+        title=f'{selected_player_name} - {selected_display_stat} Over Weeks ({selected_season})',
+        xaxis_title='Week',
+        yaxis_title=selected_display_stat,
+        xaxis=dict(tickmode='linear', tick0=1, dtick=1),
+        title_x=0.5,
+        template='plotly_white',
+        font=dict(size=14),
+        hovermode='x unified',
+        margin=dict(l=40, r=40, t=60, b=40),
+        plot_bgcolor='white',
+    )
+
+    # Update axes
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=True, gridcolor='lightgrey')
+
+    # Display the plot
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Chart Inputs Below the Chart
+    st.markdown("### Betting Line Analysis")
+    fixed_line_value = st.text_input('Enter Betting Line (Optional):', key='betting_line')
+
     if fixed_line_value:
         try:
             value = float(fixed_line_value)
@@ -217,12 +237,11 @@ else:
 
             # Display feedback with a big green arrow if positive
             percentage_over = (weeks_over / total_weeks) * 100 if total_weeks > 0 else 0
-            st.markdown("### Betting Line Analysis")
             arrow = "⬆️" if weeks_over > (total_weeks / 2) else "⬇️"
             st.success(f"{arrow} **{selected_player_name} exceeded the line in {weeks_over}/{total_weeks} weeks ({percentage_over:.1f}% of games).**")
 
-            # Create the figure
-            fig = go.Figure()
+            # Update the plot with conditional coloring
+            fig.data = []  # Clear existing traces
 
             # Add the player's performance line with conditional marker colors
             fig.add_trace(go.Scatter(
@@ -246,48 +265,9 @@ else:
                 annotation_position="top left"
             )
 
-            fig.update_layout(
-                title=f'{selected_player_name} - {selected_display_stat} Over Weeks ({selected_season})',
-                xaxis_title='Week',
-                yaxis_title=selected_display_stat,
-                xaxis=dict(tickmode='linear', tick0=1, dtick=1),
-                title_x=0.5,
-                showlegend=False,
-                template='plotly_white'
-            )
+            # Update the plot with new data
+            st.plotly_chart(fig, use_container_width=True)
+
         except ValueError:
             st.error('Please enter a valid number for the betting line.')
-    else:
-        # Plotting without betting line
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=plot_data['week'],
-            y=plot_data[selected_category],
-            mode='lines+markers',
-            marker=dict(color='blue', size=10),
-            line=dict(color='blue'),
-            name=selected_display_stat
-        ))
-        fig.update_layout(
-            title=f'{selected_player_name} - {selected_display_stat} Over Weeks ({selected_season})',
-            xaxis_title='Week',
-            yaxis_title=selected_display_stat,
-            xaxis=dict(tickmode='linear', tick0=1, dtick=1),
-            title_x=0.5,
-            template='plotly_white'
-        )
 
-    # Enhance the chart's appearance
-    fig.update_layout(
-        font=dict(size=14),
-        hovermode='x unified',
-        margin=dict(l=40, r=40, t=60, b=40),
-        plot_bgcolor='white',
-    )
-
-    # Update axes
-    fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(showgrid=True, gridcolor='lightgrey')
-
-    # Display the plot
-    st.plotly_chart(fig, use_container_width=True)
