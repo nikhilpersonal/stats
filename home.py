@@ -257,7 +257,7 @@ else:
 
     # Plotting with Plotly
     fig = go.Figure()
-    config = {'responsive': False}
+    config = {'staticPlot': True}
     
     if fixed_line_value:
         try:
