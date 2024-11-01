@@ -68,7 +68,7 @@ def get_schedule_data():
 # Function to get roster data
 @st.cache_data
 def get_roster_data():
-    seasons = 2025
+    seasons = list(range(2024, 2025))
     roster_df = nfl.import_seasonal_rosters(seasons)
     return roster_df
 
