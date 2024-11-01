@@ -342,6 +342,7 @@ else:
             zerolinecolor='#444',
             color='#c9d1d9'
         ),
+        template = "plotly_dark"
         plot_bgcolor='#0e1117',
         paper_bgcolor='#0e1117',
         font=dict(size=14, color='#c9d1d9'),
