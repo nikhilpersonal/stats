@@ -448,6 +448,7 @@ else:
                     except Exception as e:
                         st.error(f"An error occurred: {e}")
 
+
         except ValueError:
             st.error('Please enter a valid number for the betting line.')
             # Plot without betting line
@@ -457,7 +458,8 @@ else:
                 mode='lines+markers',
                 marker=dict(color='#1f77b4', size=8),
                 line=dict(color='#1f77b4', width=3),
-                name=selected_display_stat
+                name=selected_display_stat,
+                hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>'
             ))
     else:
         # Plot without betting line
@@ -467,7 +469,8 @@ else:
             mode='lines+markers',
             marker=dict(color='#1f77b4', size=8),
             line=dict(color='#1f77b4', width=3),
-            name=selected_display_stat
+            name=selected_display_stat,
+            hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>'
         ))
 
     # Update the chart layout
@@ -493,7 +496,6 @@ else:
             zerolinecolor='#444',
             color='#c9d1d9'
         ),
-        template = "seaborn",
         plot_bgcolor='#0e1117',
         paper_bgcolor='#0e1117',
         font=dict(size=14, color='#c9d1d9'),
@@ -506,10 +508,10 @@ else:
     fig.update_xaxes(title_font=dict(size=16), tickfont=dict(size=12))
     fig.update_yaxes(title_font=dict(size=16), tickfont=dict(size=12))
 
-    # Update hover label
-    #fig.update_traces(hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>')
+    # Display the interactive chart
+    chart_placeholder.plotly_chart(fig, use_container_width=True)
 
-    # Display the plot in the placeholder
-    chart_placeholder.plotly_chart(fig, config=config, use_container_width=True)
 
+    # AI Insight Generation
+    #if fixed_line_value:
         
