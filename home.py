@@ -305,6 +305,7 @@ else:
                 annotation_font_color='yellow',
                 annotation_bgcolor='#0e1117'
             )
+            
             # Show "Generate AI Insight" button
             if st.button("Generate AI Insight"):
                 with st.spinner("Generating AI Insight..."):
