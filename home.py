@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import nfl_data_py as nfl
 
 # Set the page layout to centered and add a title
-st.set_page_config(layout='centered', page_title='NFL Player Statistics Visualization')
+st.set_page_config(layout='wide', page_title='NFL Player Statistics Visualization')
 
 # Function to get player statistics
 @st.cache_data
@@ -142,7 +142,7 @@ else:
         season_avg = player_data.mean(numeric_only=True)
 
         # Display metrics below the player bio
-        st.markdown("### Recent Performance")
+        st.markdown("### Recent Performance (last 3)")
         for metric_name, metric_column in metric_stats.items():
             # Average over last 3 games
             last_3_avg = last_3_games[metric_column].mean()
