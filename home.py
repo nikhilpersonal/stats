@@ -305,6 +305,155 @@ else:
                 annotation_font_color='yellow',
                 annotation_bgcolor='#0e1117'
             )
+            # Show "Generate AI Insight" button
+            if st.button("Generate AI Insight"):
+                with st.spinner("Generating AI Insight..."):
+                    # Perform calculations before the API call to limit tokens
+                    recent_performance = last_3_games[selected_category].mean()
+                    season_performance = player_data[selected_category].mean()
+                    total_games = player_data.shape[0]
+                    games_over_line = plot_data[plot_data[selected_category] > float(fixed_line_value)].shape[0]
+                    percentage_over_line = (games_over_line / total_games) * 100 if total_games > 0 else 0
+    
+                    # Get the next opponent
+                    # Get schedule data
+                    # Get schedule data
+                    schedule_df = get_schedule_data()
+                    schedule_season = schedule_df[schedule_df['season'] == selected_season]
+    
+                    # Get weeks played so far
+                    weeks_played = player_data['week'].astype(int).unique()
+                    weeks_played.sort()
+                    if len(weeks_played) > 0:
+                        last_week_played = weeks_played.max()
+                    else:
+                        last_week_played = 0
+    
+                    # Find next game
+                    team_schedule = schedule_season[
+                        ((schedule_season['home_team'] == team) | (schedule_season['away_team'] == team)) &
+                        (schedule_season['week'] > last_week_played)
+                    ].sort_values('week')
+    
+                    if not team_schedule.empty:
+                        next_game = team_schedule.iloc[0]
+                        next_week = next_game['week']
+                        if next_game['home_team'] == team:
+                            opponent_team = next_game['away_team']
+                        else:
+                            opponent_team = next_game['home_team']
+                    else:
+                        opponent_team = None
+    
+                    if opponent_team:
+                        # Get opponent's defensive stats up to the current week
+                        # Calculate points allowed per game by the opponent defense
+                        opponent_games = schedule_season[
+                            ((schedule_season['home_team'] == opponent_team) | (schedule_season['away_team'] == opponent_team)) &
+                            (schedule_season['week'] <= last_week_played)
+                        ]
+    
+                        if not opponent_games.empty:
+                            # Calculate points allowed by opponent_team in each game
+                            def calculate_points_allowed(row):
+                                if row['home_team'] == opponent_team:
+                                    return row['away_score']
+                                else:
+                                    return row['home_score']
+    
+                            opponent_games['points_allowed'] = opponent_games.apply(calculate_points_allowed, axis=1)
+                            avg_points_allowed = opponent_games['points_allowed'].mean()
+                        else:
+                            avg_points_allowed = 0
+    
+                        # Get all games where the opponent_team was playing defense
+                        opponent_defense_games = df_season[
+                            (df_season['opponent_team'] == opponent_team) &  # They played against the opponent_team
+                            (df_season['week'] <= last_week_played)  # Only up to the last week played
+                        ]
+    
+                        # Calculate total offensive stats per team per week against the opponent_team
+                        offensive_stats = opponent_defense_games.groupby(['team', 'week']).agg({
+                            'passing_yards': 'sum',
+                            'rushing_yards': 'sum',
+                            'receiving_yards': 'sum',
+                        }).reset_index()
+    
+                        total_defensive_games = offensive_stats['week'].nunique()
+    
+                        if total_defensive_games > 0:
+                            # Now calculate average yards allowed per game
+                            avg_passing_yards_allowed = offensive_stats['passing_yards'].mean()
+                            avg_rushing_yards_allowed = offensive_stats['rushing_yards'].mean()
+                            avg_receiving_yards_allowed = offensive_stats['receiving_yards'].mean()
+                        else:
+                            avg_passing_yards_allowed = 0
+                            avg_rushing_yards_allowed = 0
+                            avg_receiving_yards_allowed = 0
+                    else:
+                        opponent_team = "Unknown"
+                        avg_points_allowed = "N/A"
+                        avg_passing_yards_allowed = "N/A"
+                        avg_rushing_yards_allowed = "N/A"
+                        avg_receiving_yards_allowed = "N/A"
+    
+                    # Prepare a concise prompt
+                    prompt = f"""
+        You are a sports analyst.
+    
+        Provide a concise analysis on the likelihood of {selected_player_name} ({position}, {team}) exceeding {float(fixed_line_value)} {selected_display_stat} in the upcoming game against {opponent_team}.
+    
+        Consider the following statistics:
+    
+        - **Average {selected_display_stat} over the last 3 games**: {recent_performance:.1f}
+        - **Season average {selected_display_stat}**: {season_performance:.1f}
+        - **Percentage of games over {float(fixed_line_value)} {selected_display_stat}**: {percentage_over_line:.1f}%
+        - **Total games played this season**: {total_games}
+    
+        Opponent's defensive stats:
+    
+        - {opponent_team} allows an average of:
+        - **Passing yards allowed per game**: {avg_passing_yards_allowed:.1f}
+        - **Rushing yards allowed per game**: {avg_rushing_yards_allowed:.1f}
+        - **Receiving yards allowed per game**: {avg_receiving_yards_allowed:.1f}
+        - **Points allowed per game**: {avg_points_allowed:.1f}
+    
+        Do not mention previous injuries or factors not included in the data.
+    
+        Conclude with a clear and concise recommendation on whether it is likely or unlikely that {selected_player_name} will exceed the betting line, supported by the data provided. Bold the key statistics in your response.
+        """
+    
+                    
+    
+                    # Initialize OpenAI API
+                    key = st.secrets["OPENAI_API_KEY"]
+                    client=OpenAI(api_key=st.secrets.OPENAI_API_KEY)
+    
+                    # Make API call to OpenAI GPT
+                    try:
+                        stream = client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=[
+                                {'role': 'system', 'content': 'you are a helpful assistant'},
+                                {"role": "user", "content": prompt}
+                            ],
+                            
+                            temperature=0.7,
+                            n=1,
+                            stop=None,
+                            stream=True
+                        )
+                        response = st.write_stream(stream)
+                        # Stream the response
+                        #full_response = ""
+                        #for chunk in response:
+                        #    if 'choices' in chunk:
+                        #        chunk_text = chunk['choices'][0].get('text', '')
+                        #        full_response += chunk_text
+                        #        message(chunk_text, is_user=False)
+    
+                    except Exception as e:
+                        st.error(f"An error occurred: {e}")
 
         except ValueError:
             st.error('Please enter a valid number for the betting line.')
@@ -370,153 +519,4 @@ else:
     # Display the plot in the placeholder
     chart_placeholder.plotly_chart(fig, config=config, use_container_width=True)
 
-    if fixed_line_value:
-        # Show "Generate AI Insight" button
-        if st.button("Generate AI Insight"):
-            with st.spinner("Generating AI Insight..."):
-                # Perform calculations before the API call to limit tokens
-                recent_performance = last_3_games[selected_category].mean()
-                season_performance = player_data[selected_category].mean()
-                total_games = player_data.shape[0]
-                games_over_line = plot_data[plot_data[selected_category] > float(fixed_line_value)].shape[0]
-                percentage_over_line = (games_over_line / total_games) * 100 if total_games > 0 else 0
-
-                # Get the next opponent
-                # Get schedule data
-                # Get schedule data
-                schedule_df = get_schedule_data()
-                schedule_season = schedule_df[schedule_df['season'] == selected_season]
-
-                # Get weeks played so far
-                weeks_played = player_data['week'].astype(int).unique()
-                weeks_played.sort()
-                if len(weeks_played) > 0:
-                    last_week_played = weeks_played.max()
-                else:
-                    last_week_played = 0
-
-                # Find next game
-                team_schedule = schedule_season[
-                    ((schedule_season['home_team'] == team) | (schedule_season['away_team'] == team)) &
-                    (schedule_season['week'] > last_week_played)
-                ].sort_values('week')
-
-                if not team_schedule.empty:
-                    next_game = team_schedule.iloc[0]
-                    next_week = next_game['week']
-                    if next_game['home_team'] == team:
-                        opponent_team = next_game['away_team']
-                    else:
-                        opponent_team = next_game['home_team']
-                else:
-                    opponent_team = None
-
-                if opponent_team:
-                    # Get opponent's defensive stats up to the current week
-                    # Calculate points allowed per game by the opponent defense
-                    opponent_games = schedule_season[
-                        ((schedule_season['home_team'] == opponent_team) | (schedule_season['away_team'] == opponent_team)) &
-                        (schedule_season['week'] <= last_week_played)
-                    ]
-
-                    if not opponent_games.empty:
-                        # Calculate points allowed by opponent_team in each game
-                        def calculate_points_allowed(row):
-                            if row['home_team'] == opponent_team:
-                                return row['away_score']
-                            else:
-                                return row['home_score']
-
-                        opponent_games['points_allowed'] = opponent_games.apply(calculate_points_allowed, axis=1)
-                        avg_points_allowed = opponent_games['points_allowed'].mean()
-                    else:
-                        avg_points_allowed = 0
-
-                    # Get all games where the opponent_team was playing defense
-                    opponent_defense_games = df_season[
-                        (df_season['opponent_team'] == opponent_team) &  # They played against the opponent_team
-                        (df_season['week'] <= last_week_played)  # Only up to the last week played
-                    ]
-
-                    # Calculate total offensive stats per team per week against the opponent_team
-                    offensive_stats = opponent_defense_games.groupby(['team', 'week']).agg({
-                        'passing_yards': 'sum',
-                        'rushing_yards': 'sum',
-                        'receiving_yards': 'sum',
-                    }).reset_index()
-
-                    total_defensive_games = offensive_stats['week'].nunique()
-
-                    if total_defensive_games > 0:
-                        # Now calculate average yards allowed per game
-                        avg_passing_yards_allowed = offensive_stats['passing_yards'].mean()
-                        avg_rushing_yards_allowed = offensive_stats['rushing_yards'].mean()
-                        avg_receiving_yards_allowed = offensive_stats['receiving_yards'].mean()
-                    else:
-                        avg_passing_yards_allowed = 0
-                        avg_rushing_yards_allowed = 0
-                        avg_receiving_yards_allowed = 0
-                else:
-                    opponent_team = "Unknown"
-                    avg_points_allowed = "N/A"
-                    avg_passing_yards_allowed = "N/A"
-                    avg_rushing_yards_allowed = "N/A"
-                    avg_receiving_yards_allowed = "N/A"
-
-                # Prepare a concise prompt
-                prompt = f"""
-    You are a sports analyst.
-
-    Provide a concise analysis on the likelihood of {selected_player_name} ({position}, {team}) exceeding {float(fixed_line_value)} {selected_display_stat} in the upcoming game against {opponent_team}.
-
-    Consider the following statistics:
-
-    - **Average {selected_display_stat} over the last 3 games**: {recent_performance:.1f}
-    - **Season average {selected_display_stat}**: {season_performance:.1f}
-    - **Percentage of games over {float(fixed_line_value)} {selected_display_stat}**: {percentage_over_line:.1f}%
-    - **Total games played this season**: {total_games}
-
-    Opponent's defensive stats:
-
-    - {opponent_team} allows an average of:
-    - **Passing yards allowed per game**: {avg_passing_yards_allowed:.1f}
-    - **Rushing yards allowed per game**: {avg_rushing_yards_allowed:.1f}
-    - **Receiving yards allowed per game**: {avg_receiving_yards_allowed:.1f}
-    - **Points allowed per game**: {avg_points_allowed:.1f}
-
-    Do not mention previous injuries or factors not included in the data.
-
-    Conclude with a clear and concise recommendation on whether it is likely or unlikely that {selected_player_name} will exceed the betting line, supported by the data provided. Bold the key statistics in your response.
-    """
-
-                
-
-                # Initialize OpenAI API
-                key = st.secrets["OPENAI_API_KEY"]
-                client=OpenAI(api_key=st.secrets.OPENAI_API_KEY)
-
-                # Make API call to OpenAI GPT
-                try:
-                    stream = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[
-                            {'role': 'system', 'content': 'you are a helpful assistant'},
-                            {"role": "user", "content": prompt}
-                        ],
-                        
-                        temperature=0.7,
-                        n=1,
-                        stop=None,
-                        stream=True
-                    )
-                    response = st.write_stream(stream)
-                    # Stream the response
-                    #full_response = ""
-                    #for chunk in response:
-                    #    if 'choices' in chunk:
-                    #        chunk_text = chunk['choices'][0].get('text', '')
-                    #        full_response += chunk_text
-                    #        message(chunk_text, is_user=False)
-
-                except Exception as e:
-                    st.error(f"An error occurred: {e}")
+        
