@@ -257,8 +257,8 @@ else:
 
     # Plotting with Plotly
     fig = go.Figure()
-    config = {'displayModeBar': False}
-
+    config = {'responsive': False}
+    
     if fixed_line_value:
         try:
             value = float(fixed_line_value)
