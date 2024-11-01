@@ -21,6 +21,7 @@ st.markdown(
     }
     /* Adjust input widgets */
     .stSelectbox, .stTextInput {
+        background-color: #161b22;
         color: #c9d1d9;
     }
     /* Adjust headings */
@@ -29,13 +30,19 @@ st.markdown(
     }
     /* Adjust dataframe */
     .stDataFrame {
-        background-color: #212529;
+        background-color: #161b22;
         color: #c9d1d9;
     }
-    /* Adjust plotly charts */
-    .modebar {
-        background-color: #0e1117;
-        color: #c9d1d9;
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #0e1117;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #161b22;
+        border-radius: 4px;
     }
     </style>
     """,
@@ -204,7 +211,7 @@ else:
                 <div style='text-align: center; margin-bottom: 10px;'>
                     <h4>{metric_name}</h4>
                     <p style='font-size: 24px; margin: 0;'>{last_3_avg:.1f}</p>
-                    <p style='margin: 0; color: {"green" if delta >= 0 else "red"};'>{delta:+.1f} vs Season Avg</p>
+                    <p style='margin: 0; color: {"#28a745" if delta >= 0 else "#dc3545"};'>{delta:+.1f} vs Season Avg</p>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -270,10 +277,11 @@ else:
                 y=plot_data[selected_category],
                 mode='lines+markers',
                 marker=dict(
-                    color=['green' if over else 'red' for over in plot_data['over_line']],
-                    size=10
+                    color=['#28a745' if over else '#dc3545' for over in plot_data['over_line']],
+                    size=10,
+                    line=dict(width=1, color='white')
                 ),
-                line=dict(color='blue'),
+                line=dict(color='#1f77b4', width=3),
                 name=selected_display_stat
             ))
 
@@ -281,9 +289,11 @@ else:
             fig.add_hline(
                 y=value,
                 line_dash='dash',
-                line_color='white',
+                line_color='yellow',
                 annotation_text=f'Betting Line at {value}',
-                annotation_position="top left"
+                annotation_position="top left",
+                annotation_font_color='yellow',
+                annotation_bgcolor='#0e1117'
             )
 
         except ValueError:
@@ -293,8 +303,8 @@ else:
                 x=plot_data['week'],
                 y=plot_data[selected_category],
                 mode='lines+markers',
-                marker=dict(color='blue', size=8),
-                line=dict(color='blue'),
+                marker=dict(color='#1f77b4', size=8),
+                line=dict(color='#1f77b4', width=3),
                 name=selected_display_stat
             ))
     else:
@@ -303,29 +313,48 @@ else:
             x=plot_data['week'],
             y=plot_data[selected_category],
             mode='lines+markers',
-            marker=dict(color='blue', size=8),
-            line=dict(color='blue'),
+            marker=dict(color='#1f77b4', size=8),
+            line=dict(color='#1f77b4', width=3),
             name=selected_display_stat
         ))
 
     # Update the chart layout
     fig.update_layout(
-        title=f'{selected_player_name} - {selected_display_stat} Over Weeks ({selected_season})',
+        title={
+            'text': f'{selected_player_name} - {selected_display_stat} Over Weeks ({selected_season})',
+            'y':0.9,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'},
         xaxis_title='Week',
         yaxis_title=selected_display_stat,
-        xaxis=dict(tickmode='linear', tick0=1, dtick=1),
-        title_x=0.5,
-        template='plotly_dark',
-        font=dict(size=14, color='#c9d1d9'),
-        hovermode='x unified',
-        margin=dict(l=40, r=40, t=60, b=40),
+        xaxis=dict(
+            tickmode='linear',
+            tick0=1,
+            dtick=1,
+            showgrid=False,
+            color='#c9d1d9'
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor='#444',
+            zerolinecolor='#444',
+            color='#c9d1d9'
+        ),
         plot_bgcolor='#0e1117',
         paper_bgcolor='#0e1117',
+        font=dict(size=14, color='#c9d1d9'),
+        hovermode='x unified',
+        margin=dict(l=40, r=40, t=80, b=40),
+        showlegend=False
     )
 
     # Update axes
-    fig.update_xaxes(showgrid=False, color='#c9d1d9')
-    fig.update_yaxes(showgrid=True, gridcolor='gray', color='#c9d1d9')
+    fig.update_xaxes(title_font=dict(size=16), tickfont=dict(size=12))
+    fig.update_yaxes(title_font=dict(size=16), tickfont=dict(size=12))
+
+    # Update hover label
+    fig.update_traces(hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>')
 
     # Display the plot in the placeholder
     chart_placeholder.plotly_chart(fig, use_container_width=True)
