@@ -358,4 +358,4 @@ else:
     fig.update_traces(hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>')
 
     # Display the plot in the placeholder
-    chart_placeholder.plotly_chart(fig, use_container_width=True)
+    chart_placeholder.plotly_chart(fig, config=config, use_container_width=True)
