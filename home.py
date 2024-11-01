@@ -18,10 +18,7 @@ st.markdown(
         background-color: #0e1117;
         color: #c9d1d9;
     }
-    /* Adjust sidebar */
-    .css-1d391kg {
-        background-color: #0e1117;
-    }
+   
     /* Adjust input widgets */
     .stSelectbox, .stTextInput {
         background-color: #161b22;
