@@ -296,7 +296,6 @@ else:
                 hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>'
             ))
 
-            # Add horizontal line for betting line
             fig.add_hline(
                 y=value,
                 line_dash='dash',
@@ -306,7 +305,7 @@ else:
                 annotation_font_color='yellow',
                 annotation_bgcolor='#0e1117'
             )
-            # Show "Generate AI Insight" button
+
             # Show "Generate AI Insight" button
             if st.button("Generate AI Insight"):
                 with st.spinner("Generating AI Insight..."):
@@ -446,14 +445,6 @@ else:
                             stream=True
                         )
                         response = st.write_stream(stream)
-                        # Stream the response
-                        #full_response = ""
-                        #for chunk in response:
-                        #    if 'choices' in chunk:
-                        #        chunk_text = chunk['choices'][0].get('text', '')
-                        #        full_response += chunk_text
-                        #        message(chunk_text, is_user=False)
-    
                     except Exception as e:
                         st.error(f"An error occurred: {e}")
 
@@ -516,7 +507,7 @@ else:
     fig.update_yaxes(title_font=dict(size=16), tickfont=dict(size=12))
 
     # Update hover label
-    fig.update_traces(hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>')
+    #fig.update_traces(hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>')
 
     # Display the plot in the placeholder
     chart_placeholder.plotly_chart(fig, config=config, use_container_width=True)
