@@ -154,4 +154,178 @@ else:
     # Remove any duplicate rows in player_data
     player_data = player_data.drop_duplicates(subset=['season', 'week'])
 
-    # Define m
+    # Define metrics based on position
+    position = position.upper()
+    if position == 'QB':
+        metric_stats = {
+            'Passing Yards': 'passing_yards',
+            'Passing TDs': 'passing_tds',
+            'Rushing TDs': 'rushing_tds'
+        }
+    elif position == 'RB':
+        # Total touchdowns (rushing + receiving)
+        player_data['total_tds'] = player_data['rushing_tds'] + player_data['receiving_tds']
+        metric_stats = {
+            'Rushing Yards': 'rushing_yards',
+            'Receiving Yards': 'receiving_yards',
+            'Total TDs': 'total_tds'
+        }
+    elif position in ['WR', 'TE']:
+        # Total touchdowns (rushing + receiving)
+        player_data['total_tds'] = player_data['rushing_tds'] + player_data['receiving_tds']
+        metric_stats = {
+            'Receiving Yards': 'receiving_yards',
+            'Receptions': 'receptions',
+            'Total TDs': 'total_tds'
+        }
+    else:
+        metric_stats = {}
+
+    # Calculate averages over last 3 games and season
+    if not metric_stats:
+        st.warning('No metrics available for this position.')
+    else:
+        # Calculate averages
+        last_3_games = player_data.tail(3)
+        season_avg = player_data.mean(numeric_only=True)
+
+        # Display metrics below the player bio
+        st.markdown("<h3 style='text-align: center;'>Recent Performance (last 3 games)</h3>", unsafe_allow_html=True)
+        for metric_name, metric_column in metric_stats.items():
+            # Average over last 3 games
+            last_3_avg = last_3_games[metric_column].mean()
+            # Season average
+            season_avg_metric = season_avg.get(metric_column, 0)
+            # Delta
+            delta = last_3_avg - season_avg_metric
+
+            # Display metric with styling
+            st.markdown(f"""
+                <div style='text-align: center; margin-bottom: 10px;'>
+                    <h4>{metric_name}</h4>
+                    <p style='font-size: 24px; margin: 0;'>{last_3_avg:.1f}</p>
+                    <p style='margin: 0; color: {"green" if delta >= 0 else "red"};'>{delta:+.1f} vs Season Avg</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+    # Box Score
+    st.markdown("<h3 style='text-align: center;'>Game-by-Game Stats</h3>", unsafe_allow_html=True)
+    # Select columns to display
+    box_score_columns = [
+        'week', 'game_date', 'opponent_team', 'fantasy_points_ppr',
+        'passing_yards', 'passing_tds', 'interceptions',
+        'rushing_yards', 'rushing_tds',
+        'receiving_yards', 'receiving_tds', 'receptions', 'targets'
+    ]
+    # Filter columns that exist in player_data
+    box_score_columns = [col for col in box_score_columns if col in player_data.columns]
+    box_score_df = player_data[box_score_columns]
+    box_score_df = box_score_df.sort_values('week')
+    box_score_df.set_index('week', inplace=True)
+
+    # Format date column if it exists
+    if 'game_date' in box_score_df.columns:
+        box_score_df['game_date'] = pd.to_datetime(box_score_df['game_date']).dt.strftime('%Y-%m-%d')
+
+    st.dataframe(box_score_df)
+
+    # Create a container for the chart
+    chart_container = st.container()
+
+    with chart_container:
+        st.markdown("<h3 style='text-align: center;'>Performance Over Time</h3>", unsafe_allow_html=True)
+        # Create a placeholder for the chart
+        chart_placeholder = st.empty()
+
+    # Betting Line Input Below the Chart (but code-wise before chart creation)
+    st.markdown("<h3 style='text-align: center;'>Betting Line Analysis</h3>", unsafe_allow_html=True)
+    fixed_line_value = st.text_input('Enter Betting Line (Optional):', key='betting_line')
+
+    # Select statistic to plot
+    selected_display_stat = st.selectbox('Select a Statistic to Plot:', list(metric_stats.keys()))
+    selected_category = metric_stats[selected_display_stat]
+
+    # Create a copy of player_data to avoid SettingWithCopyWarning
+    plot_data = player_data.copy()
+
+    # Plotting with Plotly
+    fig = go.Figure()
+
+    if fixed_line_value:
+        try:
+            value = float(fixed_line_value)
+            # Compute over/under stats
+            plot_data['over_line'] = plot_data[selected_category] > value
+            weeks_over = plot_data['over_line'].sum()
+            total_weeks = plot_data['over_line'].count()
+
+            # Display feedback with a big green arrow if positive
+            percentage_over = (weeks_over / total_weeks) * 100 if total_weeks > 0 else 0
+            arrow = "⬆️" if weeks_over > (total_weeks / 2) else "⬇️"
+            st.success(f"{arrow} **{selected_player_name} exceeded the line in {weeks_over}/{total_weeks} weeks ({percentage_over:.1f}% of games).**")
+
+            # Add the player's performance line with conditional marker colors
+            fig.add_trace(go.Scatter(
+                x=plot_data['week'],
+                y=plot_data[selected_category],
+                mode='lines+markers',
+                marker=dict(
+                    color=['green' if over else 'red' for over in plot_data['over_line']],
+                    size=10
+                ),
+                line=dict(color='blue'),
+                name=selected_display_stat
+            ))
+
+            # Add horizontal line for betting line
+            fig.add_hline(
+                y=value,
+                line_dash='dash',
+                line_color='white',
+                annotation_text=f'Betting Line at {value}',
+                annotation_position="top left"
+            )
+
+        except ValueError:
+            st.error('Please enter a valid number for the betting line.')
+            # Plot without betting line
+            fig.add_trace(go.Scatter(
+                x=plot_data['week'],
+                y=plot_data[selected_category],
+                mode='lines+markers',
+                marker=dict(color='blue', size=8),
+                line=dict(color='blue'),
+                name=selected_display_stat
+            ))
+    else:
+        # Plot without betting line
+        fig.add_trace(go.Scatter(
+            x=plot_data['week'],
+            y=plot_data[selected_category],
+            mode='lines+markers',
+            marker=dict(color='blue', size=8),
+            line=dict(color='blue'),
+            name=selected_display_stat
+        ))
+
+    # Update the chart layout
+    fig.update_layout(
+        title=f'{selected_player_name} - {selected_display_stat} Over Weeks ({selected_season})',
+        xaxis_title='Week',
+        yaxis_title=selected_display_stat,
+        xaxis=dict(tickmode='linear', tick0=1, dtick=1),
+        title_x=0.5,
+        template='plotly_dark',
+        font=dict(size=14, color='#c9d1d9'),
+        hovermode='x unified',
+        margin=dict(l=40, r=40, t=60, b=40),
+        plot_bgcolor='#0e1117',
+        paper_bgcolor='#0e1117',
+    )
+
+    # Update axes
+    fig.update_xaxes(showgrid=False, color='#c9d1d9')
+    fig.update_yaxes(showgrid=True, gridcolor='gray', color='#c9d1d9')
+
+    # Display the plot in the placeholder
+    chart_placeholder.plotly_chart(fig, use_container_width=True)
