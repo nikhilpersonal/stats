@@ -19,10 +19,7 @@ st.markdown(
         color: #c9d1d9;
     }
    
-    /* Adjust input widgets */
-    .stSelectbox, .stTextInput {
-        background-color: #161b22;
-        color: #c9d1d9;
+  
     }
     /* Adjust headings */
     h1, h2, h3, h4, h5, h6 {
