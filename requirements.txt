@@ -5,4 +5,3 @@ plotly
 nfl_data_py
 streamlit
 nba_api
-streamlit-apex-charts
