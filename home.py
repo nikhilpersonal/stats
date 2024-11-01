@@ -288,11 +288,12 @@ else:
                 mode='lines+markers',
                 marker=dict(
                     color=['#28a745' if over else '#dc3545' for over in plot_data['over_line']],
-                    size=10,
+                    size=8,
                     line=dict(width=1, color='white')
                 ),
                 line=dict(color='#1f77b4', width=3),
-                name=selected_display_stat
+                name=selected_display_stat,
+                hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>'
             ))
 
             # Add horizontal line for betting line
@@ -305,7 +306,7 @@ else:
                 annotation_font_color='yellow',
                 annotation_bgcolor='#0e1117'
             )
-            
+            # Show "Generate AI Insight" button
             # Show "Generate AI Insight" button
             if st.button("Generate AI Insight"):
                 with st.spinner("Generating AI Insight..."):
