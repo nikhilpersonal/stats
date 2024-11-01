@@ -314,7 +314,7 @@ else:
             x=plot_data['week'],
             y=plot_data[selected_category],
             mode='lines+markers',
-            template = 'seaborn',
+            template = "seaborn",
             marker=dict(color='#1f77b4', size=8),
             line=dict(color='#1f77b4', width=3),
             name=selected_display_stat
