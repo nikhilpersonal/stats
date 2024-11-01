@@ -343,8 +343,8 @@ else:
             color='#c9d1d9'
         ),
         template = "seaborn",
-        plot_bgcolor='#0e1117',
-        paper_bgcolor='#0e1117',
+        #plot_bgcolor='#0e1117',
+        #paper_bgcolor='#0e1117',
         font=dict(size=14, color='#c9d1d9'),
         hovermode='x unified',
         margin=dict(l=40, r=40, t=80, b=40),
