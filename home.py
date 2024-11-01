@@ -181,9 +181,19 @@ else:
 
     st.dataframe(box_score_df)
 
-    # Plotly Chart
-    st.markdown("### Performance Over Time")
+    # Create a container for the chart
+    chart_container = st.container()
 
+    with chart_container:
+        st.markdown("### Performance Over Time")
+        # Create a placeholder for the chart
+        chart_placeholder = st.empty()
+
+    # Betting Line Input Below the Chart (but code-wise before chart creation)
+    st.markdown("### Betting Line Analysis")
+    fixed_line_value = st.text_input('Enter Betting Line (Optional):', key='betting_line')
+
+    # Select statistic to plot
     selected_display_stat = st.selectbox('Select a Statistic to Plot:', list(metric_stats.keys()))
     selected_category = metric_stats[selected_display_stat]
 
@@ -192,40 +202,6 @@ else:
 
     # Plotting with Plotly
     fig = go.Figure()
-
-    # Add the player's performance line
-    fig.add_trace(go.Scatter(
-        x=plot_data['week'],
-        y=plot_data[selected_category],
-        mode='lines+markers',
-        marker=dict(color='blue', size=8),
-        line=dict(color='blue'),
-        name=selected_display_stat
-    ))
-
-    fig.update_layout(
-        title=f'{selected_player_name} - {selected_display_stat} Over Weeks ({selected_season})',
-        xaxis_title='Week',
-        yaxis_title=selected_display_stat,
-        xaxis=dict(tickmode='linear', tick0=1, dtick=1),
-        title_x=0.5,
-        template='plotly_white',
-        font=dict(size=14),
-        hovermode='x unified',
-        margin=dict(l=40, r=40, t=60, b=40),
-        plot_bgcolor='white',
-    )
-
-    # Update axes
-    fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(showgrid=True, gridcolor='lightgrey')
-
-    # Display the plot
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Chart Inputs Below the Chart
-    st.markdown("### Betting Line Analysis")
-    fixed_line_value = st.text_input('Enter Betting Line (Optional):', key='betting_line')
 
     if fixed_line_value:
         try:
@@ -239,9 +215,6 @@ else:
             percentage_over = (weeks_over / total_weeks) * 100 if total_weeks > 0 else 0
             arrow = "⬆️" if weeks_over > (total_weeks / 2) else "⬇️"
             st.success(f"{arrow} **{selected_player_name} exceeded the line in {weeks_over}/{total_weeks} weeks ({percentage_over:.1f}% of games).**")
-
-            # Update the plot with conditional coloring
-            fig.data = []  # Clear existing traces
 
             # Add the player's performance line with conditional marker colors
             fig.add_trace(go.Scatter(
@@ -265,9 +238,45 @@ else:
                 annotation_position="top left"
             )
 
-            # Update the plot with new data
-            st.plotly_chart(fig, use_container_width=True)
-
         except ValueError:
             st.error('Please enter a valid number for the betting line.')
+            # Plot without betting line
+            fig.add_trace(go.Scatter(
+                x=plot_data['week'],
+                y=plot_data[selected_category],
+                mode='lines+markers',
+                marker=dict(color='blue', size=8),
+                line=dict(color='blue'),
+                name=selected_display_stat
+            ))
+    else:
+        # Plot without betting line
+        fig.add_trace(go.Scatter(
+            x=plot_data['week'],
+            y=plot_data[selected_category],
+            mode='lines+markers',
+            marker=dict(color='blue', size=8),
+            line=dict(color='blue'),
+            name=selected_display_stat
+        ))
 
+    # Update the chart layout
+    fig.update_layout(
+        title=f'{selected_player_name} - {selected_display_stat} Over Weeks ({selected_season})',
+        xaxis_title='Week',
+        yaxis_title=selected_display_stat,
+        xaxis=dict(tickmode='linear', tick0=1, dtick=1),
+        title_x=0.5,
+        template='plotly_white',
+        font=dict(size=14),
+        hovermode='x unified',
+        margin=dict(l=40, r=40, t=60, b=40),
+        plot_bgcolor='white',
+    )
+
+    # Update axes
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=True, gridcolor='lightgrey')
+
+    # Display the plot in the placeholder
+    chart_placeholder.plotly_chart(fig, use_container_width=True)
