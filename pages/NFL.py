@@ -524,3 +524,58 @@ else:
     # AI Insight Generation
     #if fixed_line_value:
         
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_betting_lines(sport="americanfootball_nfl"):
+    try:
+        api_key = st.secrets["ODDS_API_KEY"]
+        odds_response = requests.get(
+            f'https://api.the-odds-api.com/v4/sports/{sport}/odds',
+            params={
+                'apiKey': api_key,
+                'regions': 'us',
+                'markets': 'player_props',
+                'oddsFormat': 'decimal'
+            }
+        )
+        
+        if odds_response.status_code != 200:
+            st.error(f"Failed to get odds: {odds_response.status_code}")
+            return None
+            
+        odds_json = odds_response.json()
+        return odds_json
+    except Exception as e:
+        st.error(f"Error fetching betting lines: {e}")
+        return None
+
+def get_player_props(player_name, stat_type):
+    odds_data = get_betting_lines()
+    if not odds_data:
+        return None
+        
+    stat_mapping = {
+        'Passing Yards': 'pass_yds',
+        'Rushing Yards': 'rush_yds',
+        'Receiving Yards': 'rec_yds',
+        'Receptions': 'receptions',
+        'Passing TDs': 'pass_tds',
+        'Rushing TDs': 'rush_tds',
+        'Receiving TDs': 'rec_tds',
+        'Total TDs': 'total_tds'
+    }
+    
+    api_stat = stat_mapping.get(stat_type)
+    if not api_stat:
+        return None
+    
+    lines = {}
+    for game in odds_data:
+        for bookmaker in game.get('bookmakers', []):
+            for market in bookmaker.get('markets', []):
+                if market.get('key') == f'player_{api_stat}':
+                    for outcome in market.get('outcomes', []):
+                        if player_name.lower() in outcome.get('description', '').lower():
+                            lines[bookmaker.get('key')] = outcome.get('point')
+    
+    return sum(lines.values()) / len(lines) if lines else None
