@@ -1,7 +1,12 @@
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 import nfl_data_py as nfl
-from streamlit_apex_charts import st_apex_charts
+import openai
+from openai import OpenAI
+from streamlit_chat import message  # For chat interface
+import requests
+from datetime import datetime
 
 # Set the page layout to wide and add a title
 st.set_page_config(layout='wide', page_title='NFL Player Statistics Visualization')
@@ -15,13 +20,8 @@ st.markdown(
         background-color: #0e1117;
         color: #c9d1d9;
     }
-    /* Adjust sidebar */
-    .css-1d391kg {
-        background-color: #0e1117;
-    }
-    /* Adjust input widgets */
-    .stSelectbox, .stTextInput {
-        color: #c9d1d9;
+   
+  
     }
     /* Adjust headings */
     h1, h2, h3, h4, h5, h6 {
@@ -29,8 +29,19 @@ st.markdown(
     }
     /* Adjust dataframe */
     .stDataFrame {
-        background-color: #212529;
+        background-color: #161b22;
         color: #c9d1d9;
+    }
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #0e1117;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #161b22;
+        border-radius: 4px;
     }
     </style>
     """,
@@ -43,11 +54,17 @@ def get_player_stats():
     seasons = list(range(2020, 2025))
     df = nfl.import_weekly_data(seasons)
     return df
-
+    
+@st.cache_data
+def get_schedule_data():
+    seasons = [selected_season]  # Only get data for the selected season
+    schedule_df = nfl.import_schedules(seasons)
+    return schedule_df
+    
 # Function to get roster data
 @st.cache_data
 def get_roster_data():
-    seasons = list(range(2020, 2025))
+    seasons = list(range(2024, 2025))
     roster_df = nfl.import_seasonal_rosters(seasons)
     return roster_df
 
@@ -199,7 +216,7 @@ else:
                 <div style='text-align: center; margin-bottom: 10px;'>
                     <h4>{metric_name}</h4>
                     <p style='font-size: 24px; margin: 0;'>{last_3_avg:.1f}</p>
-                    <p style='margin: 0; color: {"green" if delta >= 0 else "red"};'>{delta:+.1f} vs Season Avg</p>
+                    <p style='margin: 0; color: {"#28a745" if delta >= 0 else "#dc3545"};'>{delta:+.1f} vs Season Avg</p>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -234,7 +251,20 @@ else:
 
     # Betting Line Input Below the Chart (but code-wise before chart creation)
     st.markdown("<h3 style='text-align: center;'>Betting Line Analysis</h3>", unsafe_allow_html=True)
-    fixed_line_value = st.text_input('Enter Betting Line (Optional):', key='betting_line')
+    with st.spinner("Fetching betting lines..."):
+        api_line_value = get_player_props(selected_player_name, selected_display_stat)
+
+    # Allow manual override if API fails
+    if api_line_value:
+        st.info(f"Current betting line for {selected_player_name}'s {selected_display_stat}: {api_line_value}")
+        fixed_line_value = st.text_input(
+            'Enter Betting Line (Optional - override API value):',
+            value=str(api_line_value),
+            key='betting_line'
+        )
+    else:
+        st.warning("No betting line available from API - enter manually")
+        fixed_line_value = st.text_input('Enter Betting Line:', key='betting_line')
 
     # Select statistic to plot
     selected_display_stat = st.selectbox('Select a Statistic to Plot:', list(metric_stats.keys()))
@@ -243,134 +273,254 @@ else:
     # Create a copy of player_data to avoid SettingWithCopyWarning
     plot_data = player_data.copy()
 
-    # Prepare data for ApexCharts
-    weeks = plot_data['week'].tolist()
-    stats_values = plot_data[selected_category].tolist()
-
-    # Initialize chart options
-    options = {
-        "chart": {
-            "type": "line",
-            "height": 350,
-            "background": '#0e1117',
-            "toolbar": {
-                "show": False
-            },
-            "zoom": {
-                "enabled": False
-            }
-        },
-        "theme": {
-            "mode": "dark"
-        },
-        "stroke": {
-            "curve": "smooth",
-            "width": 2
-        },
-        "xaxis": {
-            "categories": weeks,
-            "title": {
-                "text": "Week",
-                "style": {
-                    "color": "#c9d1d9"
-                }
-            },
-            "labels": {
-                "style": {
-                    "colors": "#c9d1d9"
-                }
-            }
-        },
-        "yaxis": {
-            "title": {
-                "text": selected_display_stat,
-                "style": {
-                    "color": "#c9d1d9"
-                }
-            },
-            "labels": {
-                "style": {
-                    "colors": "#c9d1d9"
-                }
-            }
-        },
-        "title": {
-            "text": f"{selected_player_name} - {selected_display_stat} Over Weeks ({selected_season})",
-            "align": 'center',
-            "style": {
-                "fontSize": '16px',
-                "color": "#c9d1d9"
-            }
-        },
-        "markers": {
-            "size": 6,
-            "colors": ["#007bff"],
-            "strokeColors": "#fff",
-            "strokeWidth": 2,
-            "hover": {
-                "size": 8
-            }
-        },
-        "tooltip": {
-            "theme": "dark"
-        },
-        "grid": {
-            "borderColor": "#444",
-            "xaxis": {
-                "lines": {
-                    "show": False
-                }
-            },
-            "yaxis": {
-                "lines": {
-                    "show": True
-                }
-            }
-        }
-    }
-
-    # Data series
-    series = [{
-        "name": selected_display_stat,
-        "data": stats_values
-    }]
-
-    # Add betting line if provided
+    # Plotting with Plotly
+    fig = go.Figure()
+    config = {'staticPlot': True}
+    
     if fixed_line_value:
         try:
             value = float(fixed_line_value)
             # Compute over/under stats
-            over_line = [val > value for val in stats_values]
-            weeks_over = sum(over_line)
-            total_weeks = len(over_line)
+            plot_data['over_line'] = plot_data[selected_category] > value
+            weeks_over = plot_data['over_line'].sum()
+            total_weeks = plot_data['over_line'].count()
 
             # Display feedback with a big green arrow if positive
             percentage_over = (weeks_over / total_weeks) * 100 if total_weeks > 0 else 0
             arrow = "⬆️" if weeks_over > (total_weeks / 2) else "⬇️"
             st.success(f"{arrow} **{selected_player_name} exceeded the line in {weeks_over}/{total_weeks} weeks ({percentage_over:.1f}% of games).**")
 
-            # Update markers color based on over/under
-            colors = ['#28a745' if over else '#dc3545' for over in over_line]
-            options['markers']['colors'] = colors
+            # Add the player's performance line with conditional marker colors
+            fig.add_trace(go.Scatter(
+                x=plot_data['week'],
+                y=plot_data[selected_category],
+                mode='lines+markers',
+                marker=dict(
+                    color=['#28a745' if over else '#dc3545' for over in plot_data['over_line']],
+                    size=8,
+                    line=dict(width=1, color='white')
+                ),
+                line=dict(color='#1f77b4', width=3),
+                name=selected_display_stat,
+                hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>'
+            ))
 
-            # Add betting line annotation
-            options['annotations'] = {
-                "yaxis": [{
-                    "y": value,
-                    "borderColor": "#ffff00",
-                    "label": {
-                        "borderColor": "#ffff00",
-                        "style": {
-                            "color": "#0e1117",
-                            "background": "#ffff00"
-                        },
-                        "text": f"Betting Line: {value}"
-                    }
-                }]
-            }
+            fig.add_hline(
+                y=value,
+                line_dash='dash',
+                line_color='yellow',
+                annotation_text=f'Betting Line at {value}',
+                annotation_position="top left",
+                annotation_font_color='yellow',
+                annotation_bgcolor='#0e1117'
+            )
+
+            # Show "Generate AI Insight" button
+            if st.button("Generate AI Insight"):
+                with st.spinner("Generating AI Insight..."):
+                    # Perform calculations before the API call to limit tokens
+                    recent_performance = last_3_games[selected_category].mean()
+                    season_performance = player_data[selected_category].mean()
+                    total_games = player_data.shape[0]
+                    games_over_line = plot_data[plot_data[selected_category] > float(fixed_line_value)].shape[0]
+                    percentage_over_line = (games_over_line / total_games) * 100 if total_games > 0 else 0
+    
+                    # Get the next opponent
+                    # Get schedule data
+                    # Get schedule data
+                    schedule_df = get_schedule_data()
+                    schedule_season = schedule_df[schedule_df['season'] == selected_season]
+    
+                    # Get weeks played so far
+                    weeks_played = player_data['week'].astype(int).unique()
+                    weeks_played.sort()
+                    if len(weeks_played) > 0:
+                        last_week_played = weeks_played.max()
+                    else:
+                        last_week_played = 0
+    
+                    # Find next game
+                    team_schedule = schedule_season[
+                        ((schedule_season['home_team'] == team) | (schedule_season['away_team'] == team)) &
+                        (schedule_season['week'] > last_week_played)
+                    ].sort_values('week')
+    
+                    if not team_schedule.empty:
+                        next_game = team_schedule.iloc[0]
+                        next_week = next_game['week']
+                        if next_game['home_team'] == team:
+                            opponent_team = next_game['away_team']
+                        else:
+                            opponent_team = next_game['home_team']
+                    else:
+                        opponent_team = None
+    
+                    if opponent_team:
+                        # Get opponent's defensive stats up to the current week
+                        # Calculate points allowed per game by the opponent defense
+                        opponent_games = schedule_season[
+                            ((schedule_season['home_team'] == opponent_team) | (schedule_season['away_team'] == opponent_team)) &
+                            (schedule_season['week'] <= last_week_played)
+                        ]
+    
+                        if not opponent_games.empty:
+                            # Calculate points allowed by opponent_team in each game
+                            def calculate_points_allowed(row):
+                                if row['home_team'] == opponent_team:
+                                    return row['away_score']
+                                else:
+                                    return row['home_score']
+    
+                            opponent_games['points_allowed'] = opponent_games.apply(calculate_points_allowed, axis=1)
+                            avg_points_allowed = opponent_games['points_allowed'].mean()
+                        else:
+                            avg_points_allowed = 0
+    
+                        # Get all games where the opponent_team was playing defense
+                        opponent_defense_games = df_season[
+                            (df_season['opponent_team'] == opponent_team) &  # They played against the opponent_team
+                            (df_season['week'] <= last_week_played)  # Only up to the last week played
+                        ]
+    
+                        # Calculate total offensive stats per team per week against the opponent_team
+                        offensive_stats = opponent_defense_games.groupby(['team', 'week']).agg({
+                            'passing_yards': 'sum',
+                            'rushing_yards': 'sum',
+                            'receiving_yards': 'sum',
+                        }).reset_index()
+    
+                        total_defensive_games = offensive_stats['week'].nunique()
+    
+                        if total_defensive_games > 0:
+                            # Now calculate average yards allowed per game
+                            avg_passing_yards_allowed = offensive_stats['passing_yards'].mean()
+                            avg_rushing_yards_allowed = offensive_stats['rushing_yards'].mean()
+                            avg_receiving_yards_allowed = offensive_stats['receiving_yards'].mean()
+                        else:
+                            avg_passing_yards_allowed = 0
+                            avg_rushing_yards_allowed = 0
+                            avg_receiving_yards_allowed = 0
+                    else:
+                        opponent_team = "Unknown"
+                        avg_points_allowed = "N/A"
+                        avg_passing_yards_allowed = "N/A"
+                        avg_rushing_yards_allowed = "N/A"
+                        avg_receiving_yards_allowed = "N/A"
+    
+                    # Prepare a concise prompt
+                    prompt = f"""
+        You are a sports analyst.
+    
+        Provide a concise analysis on the likelihood of {selected_player_name} ({position}, {team}) exceeding {float(fixed_line_value)} {selected_display_stat} in the upcoming game against {opponent_team}.
+    
+        Consider the following statistics:
+    
+        - **Average {selected_display_stat} over the last 3 games**: {recent_performance:.1f}
+        - **Season average {selected_display_stat}**: {season_performance:.1f}
+        - **Percentage of games over {float(fixed_line_value)} {selected_display_stat}**: {percentage_over_line:.1f}%
+        - **Total games played this season**: {total_games}
+    
+        Opponent's defensive stats:
+    
+        - {opponent_team} allows an average of:
+        - **Passing yards allowed per game**: {avg_passing_yards_allowed:.1f}
+        - **Rushing yards allowed per game**: {avg_rushing_yards_allowed:.1f}
+        - **Receiving yards allowed per game**: {avg_receiving_yards_allowed:.1f}
+        - **Points allowed per game**: {avg_points_allowed:.1f}
+    
+        Do not mention previous injuries or factors not included in the data.
+    
+        Conclude with a clear and concise recommendation on whether it is likely or unlikely that {selected_player_name} will exceed the betting line, supported by the data provided. Bold the key statistics in your response.
+        """
+    
+                    
+    
+                    # Initialize OpenAI API
+                    key = st.secrets["OPENAI_API_KEY"]
+                    client=OpenAI(api_key=st.secrets.OPENAI_API_KEY)
+    
+                    # Make API call to OpenAI GPT
+                    try:
+                        stream = client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=[
+                                {'role': 'system', 'content': 'you are a helpful assistant'},
+                                {"role": "user", "content": prompt}
+                            ],
+                            
+                            temperature=0.7,
+                            n=1,
+                            stop=None,
+                            stream=True
+                        )
+                        response = st.write_stream(stream)
+                    except Exception as e:
+                        st.error(f"An error occurred: {e}")
+
 
         except ValueError:
             st.error('Please enter a valid number for the betting line.')
+            # Plot without betting line
+            fig.add_trace(go.Scatter(
+                x=plot_data['week'],
+                y=plot_data[selected_category],
+                mode='lines+markers',
+                marker=dict(color='#1f77b4', size=8),
+                line=dict(color='#1f77b4', width=3),
+                name=selected_display_stat,
+                hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>'
+            ))
+    else:
+        # Plot without betting line
+        fig.add_trace(go.Scatter(
+            x=plot_data['week'],
+            y=plot_data[selected_category],
+            mode='lines+markers',
+            marker=dict(color='#1f77b4', size=8),
+            line=dict(color='#1f77b4', width=3),
+            name=selected_display_stat,
+            hovertemplate='<b>Week %{x}</b><br>' + f'{selected_display_stat}: ' + '%{y}<extra></extra>'
+        ))
 
-    # Display the chart using ApexCharts
-    st_apex_charts(options=options, series=series)
+    # Update the chart layout
+    fig.update_layout(
+        title={
+            'text': f'{selected_player_name} - {selected_display_stat} Over Weeks ({selected_season})',
+            'y':0.9,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'},
+        xaxis_title='Week',
+        yaxis_title=selected_display_stat,
+        xaxis=dict(
+            tickmode='linear',
+            tick0=1,
+            dtick=1,
+            showgrid=False,
+            color='#c9d1d9'
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor='#444',
+            zerolinecolor='#444',
+            color='#c9d1d9'
+        ),
+        plot_bgcolor='#0e1117',
+        paper_bgcolor='#0e1117',
+        font=dict(size=14, color='#c9d1d9'),
+        hovermode='x unified',
+        margin=dict(l=40, r=40, t=80, b=40),
+        showlegend=False
+    )
+
+    # Update axes
+    fig.update_xaxes(title_font=dict(size=16), tickfont=dict(size=12))
+    fig.update_yaxes(title_font=dict(size=16), tickfont=dict(size=12))
+
+    # Display the interactive chart
+    chart_placeholder.plotly_chart(fig, use_container_width=True)
+
+
+    # AI Insight Generation
+    #if fixed_line_value:
+        
